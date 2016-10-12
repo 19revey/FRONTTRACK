@@ -19,7 +19,7 @@ void fluidclass::timeloop(){
     for (int is=0;is<nstep;is++)
     {
         time=is;
-        
+        //cout<<ny<<endl;
         copy2d(un, u, nx+1, ny+2);
         copy2d(vn, v, nx+2, ny+1);
         copy2d(rn, r, nx+2, ny+2);
@@ -29,6 +29,7 @@ void fluidclass::timeloop(){
 
         for (int substep=1; substep<=2; substep++) {
             
+            find_surface_tension();
             
             calculate_boundary_velocity();
             
@@ -44,7 +45,7 @@ void fluidclass::timeloop(){
             
             
             advect_front();
-            add_points_to_front();
+
             distribute_gradient();
             update_viscosity();
             
@@ -53,31 +54,34 @@ void fluidclass::timeloop(){
             
         }
         
-        if((int)time % print_interval==0) {
-            
-            print_vtk();
-            print_dem();
-        }
+        
         /////
         for (int i=0; i<=nx; i++) {
-            for (int j=0; j<=ny+1; ny++) {
+            for (int j=0; j<=ny+1; j++) {
                 u[i][j]=(u[i][j]+un[i][j])/2;
             }
         }
         for (int i=0; i<=nx+1; i++) {
-            for (int j=0; j<=ny; ny++) {
+            for (int j=0; j<=ny; j++) {
                 v[i][j]=(v[i][j]+vn[i][j])/2;
             }
         }
         for (int i=0; i<=nx+1; i++) {
-            for (int j=0; j<=ny+1; ny++) {
+            for (int j=0; j<=ny+1; j++) {
                 r[i][j]=(r[i][j]+rn[i][j])/2;
                 m[i][j]=(m[i][j]+mn[i][j])/2;
             }
         }
-        for (int i=0; i<10*Nf+2; i++) {
+        for (int i=0; i<10*Nfv+2; i++) {
             xf[i]=(xf[i]+xfn[i])/2;
             yf[i]=(yf[i]+yfn[i])/2;
+        }//////
+        add_points_to_front();
+        
+        if((int)time % print_interval==0) {
+            
+            print_vtk();
+            print_dem();
         }
         
     }
@@ -121,7 +125,7 @@ void fluidclass::initialize_fluid(){
     
 
     //set front//////////////////////////////////////////////
-    Nf=100;                                                //
+    Nf=100;Nfv=Nf;                                                //
     xf=make1dmem(10*Nf+2, 0); yf=make1dmem(10*Nf+2, 0);    //
     uf=make1dmem(10*Nf+2, 0); vf=make1dmem(10*Nf+2, 0);    //
     xfold=make1dmem(10*Nf+2, 0);                           //
@@ -319,17 +323,17 @@ void fluidclass::print_dem(){
     fprintf(fvtk,"Particle Tracking: ...\n");
     fprintf(fvtk,"ASCII\n\n");
     fprintf(fvtk,"DATASET UNSTRUCTURED_GRID\n");
-    fprintf(fvtk,"POINTS %d double\n",Nf);
+    fprintf(fvtk,"POINTS %d double\n",Nfv);
     
-    for(int j=1;j<=Nf;j++){
+    for(int j=1;j<=Nfv;j++){
         fprintf(fvtk,"%.4e %.4e 0\n",xf[j]+0.5*dx,yf[j]+0.5*dy);
     }
     
-    fprintf(fvtk,"\nPOINT_DATA %d\n", Nf);
+    fprintf(fvtk,"\nPOINT_DATA %d\n", Nfv);
     fprintf(fvtk,"SCALARS diameter double 1\n");
     fprintf(fvtk,"LOOKUP_TABLE DEFAULT\n");
     
-    for(int j=1;j<=Nf;j++){
+    for(int j=1;j<=Nfv;j++){
         fprintf(fvtk,"%.5e\n",2*rad);
     }
     
@@ -344,7 +348,7 @@ void fluidclass::advect_front(){
     int ip=0;int jp=0;
     double ax,ay;
     //*****//calculate front velocity
-    for (int lfn=1; lfn<=Nf; lfn++) {
+    for (int lfn=1; lfn<=Nfv; lfn++) {
         //swap u
         ip=floor(xf[lfn]/dx);                         //u velocity id in x dir
         jp=floor((yf[lfn]+0.5*dy)/dy);                //u velocity id in y dir
@@ -359,14 +363,14 @@ void fluidclass::advect_front(){
         vf[lfn]=(1-ax)*(1-ay)*v[ip][jp]+ax*(1-ay)*v[ip+1][jp]+(1-ax)*ay*v[ip][jp+1]+ax*ay*v[ip+1][jp+1];
     }
     //*****//move front
-    for (int i=1; i<=Nf; i++) {
+    for (int i=1; i<=Nfv; i++) {
         xf[i]=xf[i]+dt*uf[i];
         yf[i]=yf[i]+dt*vf[i];
     }
-    xf[0]=xf[Nf];
-    yf[0]=yf[Nf];
-    xf[Nf+1]=xf[1];
-    yf[Nf+1]=yf[1];
+    xf[0]=xf[Nfv];
+    yf[0]=yf[Nfv];
+    xf[Nfv+1]=xf[1];
+    yf[Nfv+1]=yf[1];
     
     
 
@@ -379,7 +383,7 @@ void fluidclass::add_points_to_front(){
     copy1d(xfold, xf, 10*Nf+2);
     copy1d(yfold, yf, 10*Nf+2);
     int j=0; double ds;
-    for (int lfn=1; lfn<=Nf; lfn++) {
+    for (int lfn=1; lfn<=Nfv; lfn++) {
         ds=sqrt( square((xfold[lfn]-xf[j])/dx)+square((yfold[lfn]-yf[j])/dy) );
         if (ds>0.5) {
             j=j+1;
@@ -398,11 +402,14 @@ void fluidclass::add_points_to_front(){
             xf[j]=xfold[lfn]; yf[j]=yfold[lfn];
         }
     }
-    Nf=j;
-    xf[0]=xf[Nf];
-    yf[0]=yf[Nf];
-    xf[Nf+1]=xf[1];
-    yf[Nf+1]=yf[1];
+    Nfv=j;
+    xf[0]=xf[Nfv];
+    yf[0]=yf[Nfv];
+    xf[Nfv+1]=xf[1];
+    yf[Nfv+1]=yf[1];
+    for (int i=Nfv+2; i<10*Nf+2; i++) {
+        xf[i]=0;yf[i]=0;
+    }
     
 
 }
@@ -420,7 +427,7 @@ void fluidclass::distribute_gradient(){
             fy[i][j]=0;
         }
     }
-    for (int lfn=1; lfn<=Nf; lfn++) {
+    for (int lfn=1; lfn<=Nfv; lfn++) {
         nfx=-0.5*(yf[lfn+1]-yf[lfn-1])*(rho2-rho1);
         nfy=0.5*(xf[lfn+1]-xf[lfn-1])*(rho2-rho1);
         ip=floor(xf[lfn]/dx);
@@ -481,13 +488,13 @@ void fluidclass::find_surface_tension(){
     double nfx,nfy;
     int ip,jp;
     double ax,ay;
-    for (int lfn=0; lfn<=Nf; lfn++) {
+    for (int lfn=0; lfn<=Nfv; lfn++) {
         ds=sqrt( square(xf[lfn+1]-xf[lfn])+square(yf[lfn+1]-yf[lfn]) );
         tx[lfn]=( xf[lfn+1]-xf[lfn] )/ds;
         ty[lfn]=( yf[lfn+1]-yf[lfn] )/ds;
     }
-    tx[Nf+1]=tx[1];ty[Nf+1]=ty[1];
-    for (int lfn=1; lfn<=Nf; lfn++) {
+    tx[Nfv+1]=tx[1];ty[Nfv+1]=ty[1];
+    for (int lfn=1; lfn<=Nfv; lfn++) {
         nfx=sigma*( tx[lfn]-tx[lfn-1] );
         nfy=sigma*( ty[lfn]-ty[lfn-1] );
         ip=floor(xf[lfn]/dx);
@@ -516,18 +523,20 @@ void fluidclass::solve_velocity_adv_diff(){
     for(int i=1; i<=nx-1;i++)
         for (int j=1;j<=ny;j++)
         {
-            double Advx=0.25 * (square(u[i+1][j]+u[i][j])-square(u[i][j]+u[i-1][j]))/dx + 0.25*( (u[i][j+1]+u[i][j])*(v[i+1][j]+v[i][j]) - (u[i][j]+u[i][j-1])*(v[i+1][j-1]+v[i][j-1]) )/dy + fx[i][j]/(0.5*(r[i+1][j]+r[i][j]));
+            double Advx=0.25 * (square(u[i+1][j]+u[i][j])-square(u[i][j]+u[i-1][j]))/dx + 0.25*( (u[i][j+1]+u[i][j])*(v[i+1][j]+v[i][j]) - (u[i][j]+u[i][j-1])*(v[i+1][j-1]+v[i][j-1]) )/dy ;
+
             //double Difx=( ( u[i+1][j]-2*u[i][j]+u[i-1][j] )/square(dx)+ ( u[i][j+1]-2*u[i][j]+u[i][j-1] )/square(dy))*m0;
-            ut[i][j]=u[i][j]+dt*(-Advx +(1.0-rro/(0.5*(r[i+1][j]+r[i][j])))*gx );
+            ut[i][j]=u[i][j]+dt*(-Advx + fx[i][j]/(0.5*(r[i+1][j]+r[i][j]))+(1.0-rro/(0.5*(r[i+1][j]+r[i][j])))*gx );
         }
 
     for (int i=1;i<=nx;i++)
         for(int j=1;j<=ny-1;j++)
         {
-            double Advy=0.25 * ((u[i][j+1]+u[i][j])*(v[i+1][j]+v[i][j])-(u[i-1][j+1]+u[i-1][j])*(v[i][j]+v[i-1][j]))/dx+0.25*(square(v[i][j+1]+v[i][j])-square(v[i][j]+v[i][j-1]))/dy;
+            double Advy=0.25 * ((u[i][j+1]+u[i][j])*(v[i+1][j]+v[i][j])-(u[i-1][j+1]+u[i-1][j])*(v[i][j]+v[i-1][j]))/dx+0.25*(square(v[i][j+1]+v[i][j])-square(v[i][j]+v[i][j-1]) )/dy ;
             //double Dify=((v[i+1][j]-2*v[i][j]+v[i-1][j])/square(dx)+(v[i][j+1]-2*v[i][j]+v[i][j-1])/square(dy))*m0;
-            vt[i][j]=v[i][j]+dt*(-Advy +(1.0-rro/(0.5*(r[i][j+1]+r[i][j])))*gy);
+            vt[i][j]=v[i][j]+dt*(-Advy + fy[i][j]/(0.5*(r[i][j+1]+r[i][j]))+(1.0-rro/(0.5*(r[i][j+1]+r[i][j])))*gy);
         }
+    
     for (int i=1; i<=nx-1; i++)
         for (int j=1; j<=ny; j++) {
             double Difx=1.0/dx*2*(m[i+1][j]*(u[i+1][j]-u[i][j])/dx-m[i][j]*(u[i][j]-u[i-1][j])/dy) +1/dy*(0.25*(m[i][j]+m[i+1][j]+m[i+1][j+1]+m[i][j+1])*( (u[i][j+1]-u[i][j])/dy+(v[i+1][j]-v[i][j])/dx) - 0.25*(m[i][j]+m[i+1][j]+m[i+1][j-1]+m[i][j-1])*( (u[i][j]-u[i][j-1])/dy+ (v[i+1][j-1]-v[i][j-1])/dx) );

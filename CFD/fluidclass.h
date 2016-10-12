@@ -22,7 +22,7 @@ protected:
     double** ro;
 
     //front tracking information//
-    int Nf;                     //
+    int Nf,Nfv;                     //
     double* xf;double* yf;      //front position
     double* uf;double* vf;      //front velocity
     double* tx;double* ty;      //tangent vectors
@@ -65,7 +65,7 @@ public:
     void find_surface_tension();                            //
     void solve_velocity_adv_diff();
     void update_viscosity();
-    void second_order_time();
+
     
     ~fluidclass(){};
     

@@ -13,10 +13,10 @@
 param::param(){
     lx=1.0;ly=1.0;gx=0;gy=-100;
     unorth=0;usouth=0;veast=0;vwest=0;time=0;
-    nx=64;ny=64;dt=0.00125;
-    nstep=30;
+    nx=64;ny=64;dt=0.000625;
+    nstep=800;
     maxit=200;maxError=0.001;beta=1.2;
-    print_interval=10;
+    print_interval=20;
     //zero various arrays
     
     
